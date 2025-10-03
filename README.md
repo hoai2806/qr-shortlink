@@ -65,6 +65,33 @@ Logo gửi dưới dạng base64 (client đọc file). Server lưu vào `public/
 - Logo quá lớn sẽ tự resize 20% kích thước QR.
  - In-memory cache không chia sẻ giữa replicas (Serverless). Dùng CDN hoặc persistent cache nếu cần.
 
+## Triển khai Vercel + Supabase
+
+1. Tạo project Supabase (chọn region Singapore / ap-southeast-1) → Lấy `DATABASE_URL` dạng Postgres.
+2. Import repo vào Vercel.
+3. Thiết lập Environment Variables (Project Settings → Environment Variables):
+	- `DATABASE_URL` = chuỗi Supabase
+	- `NEXTAUTH_SECRET` = chuỗi random (openssl rand -base64 32)
+	- `BASE_URL` = https://<domain-vercel-hoặc-custom>
+4. Build Command (tùy chọn nếu muốn chắc chắn migrations chạy): `npm run vercel-build`
+	- Hoặc để mặc định và thêm trong Dashboard: `prisma migrate deploy && next build`.
+5. Sau deploy kiểm tra log có dòng `Prisma migrate deploy`.
+6. Đăng ký tài khoản thử, tạo link, quét QR.
+7. Gắn custom domain vào Vercel → cập nhật biến `BASE_URL` rồi redeploy.
+
+### Pooling / Kết nối
+Supabase free đủ tốt ban đầu. Nếu gặp lỗi connection (hiếm), bật PgBouncer (Pooling Mode) trong Supabase và dùng URL pooling cho `DATABASE_URL`.
+
+### Caching QR
+Route `/api/qrcode/:slug` đã trả ETag + Cache-Control. Ngoài ra `next.config.js` thêm header sẵn cho max-age=3600 + stale-while-revalidate.
+
+### Nâng cấp hiệu năng
+- Redirect /s/:slug có thể dời sang Cloudflare Worker nếu traffic tăng mạnh để giảm latency.
+- Pre-render và lưu file QR (S3/R2) nếu CPU xử lý logo nhiều.
+
+### Rollback nhanh
+Sử dụng tính năng Deployments của Vercel (Revert) nếu migration không phá hủy dữ liệu schema. Với migration nguy hiểm: chạy `prisma migrate diff` trước.
+
 ## License
 MIT
 # qr-shortlink
