@@ -8,39 +8,43 @@
 3. Sinh QR code với tùy chọn: kích thước, màu foreground, màu background, logo nhúng giữa
 4. Xem danh sách (lọc theo user sau khi đăng nhập), chỉnh sửa cấu hình và target URL
 5. Endpoint redirect: `/s/{slug}` (ghi nhận thống kê lượt quét)
-6. Endpoint ảnh QR động: `/api/qrcode/{slug}` (có cache in-memory + ETag)
+6. Endpoint ảnh QR động: `/api/qrcode/{slug}` (có cache in-memory + ETag + header Cache-Control)
 7. Đăng ký / đăng nhập (Credentials) với NextAuth
 8. Thống kê lượt quét (viewsCount + bảng sự kiện)
 
 ## Thiết kế ổn định
 QR code luôn mã hóa URL trung gian: `${BASE_URL}/s/{slug}`. Khi bạn đổi `targetUrl`, ảnh QR không cần thay đổi vì slug giữ nguyên.
 
-## Cài đặt
+## Cài đặt (Local Dev)
 
-1. Sao chép `.env.example` thành `.env` và chỉnh:
-```
-DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/qrdb?schema=public
-BASE_URL=http://localhost:3000
-NEXTAUTH_SECRET=chuoi_bi_mat
-```
-2. Cài dependency:
-```
-npm install
-```
-3. Tạo migration & generate Prisma Client:
-```
-npx prisma migrate dev --name init
-```
-4. Chạy dev:
-```
-npm run dev
-```
-5. Mở `http://localhost:3000`
+1. Tạo schema riêng (tùy chọn nhưng khuyến nghị nếu định deploy Supabase):
+	```sql
+	create schema if not exists qr_app;
+	```
+2. Sao chép `.env.example` thành `.env` và chỉnh:
+	```
+	DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/qrdb?schema=qr_app
+	BASE_URL=http://localhost:3000
+	NEXTAUTH_SECRET=chuoi_bi_mat
+	```
+3. Cài dependency:
+	```bash
+	npm install
+	```
+4. Tạo migration & generate Prisma Client:
+	```bash
+	npx prisma migrate dev --name init
+	```
+5. Chạy dev:
+	```bash
+	npm run dev
+	```
+6. Mở `http://localhost:3000`
 
 ## Cấu trúc bảng
-`User(id, email unique, passwordHash, name?, createdAt, updatedAt)`
-`Link(id, slug unique, targetUrl, ownerId?, viewsCount, createdAt, updatedAt)`
-`QrCode(id, linkId unique FK->Link, size, foregroundColor, backgroundColor, logoPath, createdAt, updatedAt)`
+`User(id, email unique, passwordHash, name?, createdAt, updatedAt)`  
+`Link(id, slug unique, targetUrl, ownerId?, viewsCount, createdAt, updatedAt)`  
+`QrCode(id, linkId unique FK->Link, size, foregroundColor, backgroundColor, logoPath, createdAt, updatedAt)`  
 `ScanEvent(id, linkId FK->Link, createdAt, ip?, userAgent?)`
 
 ## Upload logo
@@ -50,48 +54,56 @@ Logo gửi dưới dạng base64 (client đọc file). Server lưu vào `public/
 - POST `/api/links` body: `{ targetUrl, slug?, size?, foregroundColor?, backgroundColor?, logoBase64? }`
 - PATCH `/api/links/{id}` body: trường muốn cập nhật
 - GET `/api/qrcode/{slug}` -> ảnh PNG
-- GET `/s/{slug}` -> redirect 302
+- GET `/s/{slug}` -> redirect 302 (ghi nhận thống kê)
 
 ## Ghi chú bảo mật / mở rộng
 - Thêm 2FA / OAuth providers (Google, GitHub) qua NextAuth.
 - Thêm rate limit khi tạo link.
 - Có thể cache ảnh QR đã render ra file để giảm CPU.
 - Thêm trường đếm số lần click (tạo bảng ClickLog / middleware).
- - Triển khai Vercel: cần đặt biến môi trường `DATABASE_URL`, `NEXTAUTH_SECRET`, `BASE_URL` (dùng Production URL). Cơ chế cache in-memory chỉ hiệu quả trên mỗi instance; cân nhắc object storage hoặc edge cache (CDN) nếu lưu lượng lớn.
+- Triển khai Vercel: cần đặt biến môi trường `DATABASE_URL`, `NEXTAUTH_SECRET`, `BASE_URL`. Cache in-memory chỉ hiệu quả mỗi instance.
+- Dùng schema riêng (`qr_app`) để tránh lỗi Prisma P3005 trên Supabase.
 
 ## Giới hạn & Edge Cases
 - Kích thước giới hạn (120-1024).
 - Màu hex hợp lệ (#RRGGBB) nên được kiểm tra thêm (hiện tại minimal).
 - Logo quá lớn sẽ tự resize 20% kích thước QR.
- - In-memory cache không chia sẻ giữa replicas (Serverless). Dùng CDN hoặc persistent cache nếu cần.
+- In-memory cache không chia sẻ giữa replicas (Serverless). Dùng CDN hoặc persistent cache nếu cần.
 
 ## Triển khai Vercel + Supabase
 
-1. Tạo project Supabase (chọn region Singapore / ap-southeast-1) → Lấy `DATABASE_URL` dạng Postgres.
-2. Import repo vào Vercel.
-3. Thiết lập Environment Variables (Project Settings → Environment Variables):
-	- `DATABASE_URL` = chuỗi Supabase
-	- `NEXTAUTH_SECRET` = chuỗi random (openssl rand -base64 32)
-	- `BASE_URL` = https://<domain-vercel-hoặc-custom>
-4. Build Command (tùy chọn nếu muốn chắc chắn migrations chạy): `npm run vercel-build`
-	- Hoặc để mặc định và thêm trong Dashboard: `prisma migrate deploy && next build`.
-5. Sau deploy kiểm tra log có dòng `Prisma migrate deploy`.
-6. Đăng ký tài khoản thử, tạo link, quét QR.
-7. Gắn custom domain vào Vercel → cập nhật biến `BASE_URL` rồi redeploy.
+1. Tạo project Supabase (region ap-southeast-1). Trong SQL Editor:
+	```sql
+	create schema if not exists qr_app;
+	```
+2. Lấy connection string (nếu dùng PgBouncer pooler cổng 6543) và thêm `&schema=qr_app` (khuyến nghị thêm `pgbouncer=true&sslmode=require`).
+3. Import repo vào Vercel.
+4. Environment Variables:
+	- `DATABASE_URL` = `...postgres?pgbouncer=true&sslmode=require&schema=qr_app`
+	- `NEXTAUTH_SECRET` = `openssl rand -base64 32`
+	- `BASE_URL` = Production domain (vd: https://qr-shortlink.vercel.app)
+5. Build Command: `npm run vercel-build` (chạy `prisma migrate deploy` + build). Hoặc giữ mặc định và add script migrate trong UI.
+6. Redeploy → kiểm tra log có `Prisma migrate deploy`.
+7. Đăng ký user, tạo link, quét QR.
+8. Gắn custom domain (nếu có) rồi cập nhật lại `BASE_URL`.
 
 ### Pooling / Kết nối
-Supabase free đủ tốt ban đầu. Nếu gặp lỗi connection (hiếm), bật PgBouncer (Pooling Mode) trong Supabase và dùng URL pooling cho `DATABASE_URL`.
+Khuyến nghị luôn dùng pooler trên Supabase: giảm nguy cơ quá nhiều kết nối serverless. Ví dụ URL:
+```
+postgresql://postgres:<PASSWORD>@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true&sslmode=require&schema=qr_app
+```
 
 ### Caching QR
-Route `/api/qrcode/:slug` đã trả ETag + Cache-Control. Ngoài ra `next.config.js` thêm header sẵn cho max-age=3600 + stale-while-revalidate.
+Route `/api/qrcode/:slug` có ETag + Cache-Control (max-age=3600, stale-while-revalidate). Có thể thay sang persistent / CDN nếu tải lớn.
 
 ### Nâng cấp hiệu năng
-- Redirect /s/:slug có thể dời sang Cloudflare Worker nếu traffic tăng mạnh để giảm latency.
-- Pre-render và lưu file QR (S3/R2) nếu CPU xử lý logo nhiều.
+- Tách redirect `/s/:slug` sang Cloudflare Worker nếu cần latency thấp hơn.
+- Pre-render QR + lưu object storage (R2/S3) khi traffic lớn.
 
 ### Rollback nhanh
-Sử dụng tính năng Deployments của Vercel (Revert) nếu migration không phá hủy dữ liệu schema. Với migration nguy hiểm: chạy `prisma migrate diff` trước.
+Sử dụng Vercel Deployments (Revert). Với migration phá hủy, cân nhắc `prisma migrate diff` trước.
 
 ## License
 MIT
+
 # qr-shortlink
