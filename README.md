@@ -103,6 +103,18 @@ Route `/api/qrcode/:slug` có ETag + Cache-Control (max-age=3600, stale-while-re
 ### Rollback nhanh
 Sử dụng Vercel Deployments (Revert). Với migration phá hủy, cân nhắc `prisma migrate diff` trước.
 
+## Triển khai qua FTP/SFTP (không khuyến khích)
+Nếu bạn buộc phải upload thủ công (shared hosting / không có quyền git clone), xem hướng dẫn chi tiết ở: `scripts/deploy-ftp.md`.
+
+Tóm tắt nhanh:
+- Build ở local: `npm install && npm run build`.
+- Upload các thư mục: `.next`, `app`, `lib`, `components`, `prisma`, và các file cấu hình (`package.json`, `next.config.js`, `middleware.ts`).
+- Tạo `.env` trực tiếp trên server (không upload nếu có thể tránh).
+- Chạy: `npm ci --omit=dev && npx prisma migrate deploy && pm2 start npm --name "qr-app" -- start`.
+- Cấu hình Nginx reverse proxy + HTTPS như phần VPS.
+
+Nhược điểm: khó đồng bộ, dễ sai phiên bản, không tự rollback. Khuyến nghị chuyển sang Git + SSH hoặc CI/CD khi có thể.
+
 ## License
 MIT
 
