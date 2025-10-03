@@ -1,0 +1,53 @@
+// Prisma schema for QR Shortlink Manager
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Link {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  targetUrl String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  qrCode    QrCode?
+  ownerId   String?
+  owner     User?    @relation(fields: [ownerId], references: [id])
+  viewsCount Int     @default(0)
+  scanEvents ScanEvent[]
+}
+
+model QrCode {
+  id              String   @id @default(cuid())
+  linkId          String   @unique
+  link            Link     @relation(fields: [linkId], references: [id])
+  size            Int      @default(300)
+  foregroundColor String   @default("#000000")
+  backgroundColor String   @default("#FFFFFF")
+  logoPath        String?  // relative path under public/logos
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  links        Link[]
+}
+
+model ScanEvent {
+  id        String   @id @default(cuid())
+  linkId    String
+  link      Link     @relation(fields: [linkId], references: [id])
+  createdAt DateTime @default(now())
+  ip        String?
+  userAgent String?
+}

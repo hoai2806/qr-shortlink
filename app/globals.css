@@ -1,0 +1,12 @@
+* { box-sizing: border-box; }
+body { line-height: 1.45; }
+a { text-decoration: none; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #e5e7eb; padding: 6px 8px; font-size: 0.85rem; }
+th { background: #f3f4f6; text-align: left; }
+input, select { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; }
+input:focus { outline: 2px solid #2563eb33; }
+button { background: #2563eb; color: white; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; }
+button:hover { background: #1d4ed8; }
+form > div { margin-bottom: 0.75rem; }
+label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.8rem; }
