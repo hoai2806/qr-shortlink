@@ -67,3 +67,4 @@ Logo gửi dưới dạng base64 (client đọc file). Server lưu vào `public/
 
 ## License
 MIT
+# qr-shortlink
